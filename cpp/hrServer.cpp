@@ -10,8 +10,9 @@
 #include <dlib/image_processing.h>
 #include <dlib/gui_widgets.h>
 #include <dlib/image_io.h>
-#include<dlib/opencv.h>
-
+#include <dlib/opencv.h>
+#include "Spline.h"
+#include "fftw3.h"
 
 
 using namespace cv::dnn;
@@ -27,9 +28,6 @@ using namespace std;
 #define QUALITY_LEVEL 0.01
 #define MIN_DISTANCE 25
 #define MAXNUMBERS 3
-//dlib::shape_predictor sp;
-//dlib::full_object_detection shape, shape1;
-//string modelpath = "shape_predictor_68_face_landmarks.dat";
 
 
 
@@ -42,7 +40,7 @@ void hrServer::array2Mat(double green[], int length) {//把客户端传来的绿
 void hrServer::array2Mat(int reTrack[], int length) {//把客户端传来的重新人脸跟踪数组变为opencv的MAT格式
 	re = cv::Mat1b(length, 1);
 	for (int i = 0; i < length; i++) {
-		re.at<uchar>(i, 0) = reTrack[i];
+		re.at<uchar>(i, 0) = 0;
 	}
 
 }
@@ -156,190 +154,56 @@ void hrServer::timeToFrequency(cv::InputArray _a, cv::OutputArray _b, bool magni
 
 
 
-void hrServer::extractSignal_g(int reTrack[], double green[], int length, double fps) {
-	array2Mat(reTrack, length);
-	array2Mat(green, length);
-	this->fps = fps;
+void hrServer::extractSignal_g(int reTrack[], double green[], int length, double fps,int timeStamps[]) {
+
+
+	double dtimeStamps[1000] = {}, _dtimeStamps[1000], _green[1000];
+	for (int i = 0; i < length; ++i) {
+		dtimeStamps[i] = (double)timeStamps[i];
+	}
+	SplineSpace::SplineInterface* sp = new SplineSpace::Spline(dtimeStamps, green, length);
+	int lamda = 1;
+	sp->AutoInterp(lamda * length, _dtimeStamps, _green);
+
+
+
+	array2Mat(reTrack, lamda*length);
+	array2Mat(green, lamda*length);
+	this->fps = fps*lamda;
 
 	// 差分
 	cv::Mat s_den = cv::Mat(s.rows, 1, CV_64F);
-	//cv::Mat s_den1 = cv::Mat(s.rows, 1, CV_64F);
-	//cv::Mat s_den2 = cv::Mat(s.rows, 1, CV_64F);
-	//cv::Mat s_den3 = cv::Mat(s.rows, 1, CV_64F);
-	//cv::Mat s_den4 = cv::Mat(s.rows, 1, CV_64F);
+
+
 	denoise(s, re, s_den);
-	//denoise(s1.col(1), re, s_den1);
-	//denoise(s2.col(1), re, s_den2);
-	//denoise(s3.col(1), re, s_den3);
-	//denoise(s4.col(1), re, s_den4);
+
+
 
 	// 归一化
 	normalization(s_den, s_den);
-	//normalization(s_den1, s_den1);
-	//normalization(s_den2, s_den2);
- //   normalization(s_den3, s_den3);
-	//normalization(s_den4, s_den4);
+
+
 
 	// 高通滤波
 	cv::Mat s_det = cv::Mat(s_den.rows, s_den.cols, CV_64F);
-	//cv::Mat s_det1 = cv::Mat(s_den1.rows, s_den1.cols, CV_64F);
-	//cv::Mat s_det2 = cv::Mat(s_den2.rows, s_den2.cols, CV_64F);
-	//cv::Mat s_det3 = cv::Mat(s_den3.rows, s_den3.cols, CV_64F);
-	//cv::Mat s_det4 = cv::Mat(s_den4.rows, s_den4.cols, CV_64F);
-	//int time4 = (cv::getTickCount() * 1000.0) / cv::getTickFrequency();
-	//cout << "time4:" << time4 << std::endl;
-	detrend(s_den, s_det, fps);
-	//int time5 = (cv::getTickCount() * 1000.0) / cv::getTickFrequency();
-	//cout << "time5:" << time5 << std::endl;
-	//detrend(s_den1, s_det1, fps);
-	//detrend(s_den2, s_det2, fps);
-	//detrend(s_den3, s_det3, fps);
-	//detrend(s_den4, s_det4, fps);
+
+
+	detrend(s_den, s_det, this->fps);
+
+
 
 	// 低通滤波
 	cv::Mat s_mav = cv::Mat(s_det.rows, s_det.cols, CV_64F);
-	//cv::Mat s_mav1 = cv::Mat(s_det.rows, s_det.cols, CV_64F);
-	//cv::Mat s_mav2 = cv::Mat(s_det.rows, s_det.cols, CV_64F);
-	//cv::Mat s_mav3 = cv::Mat(s_det.rows, s_det.cols, CV_64F);
-	//cv::Mat s_mav4 = cv::Mat(s_det.rows, s_det.cols, CV_64F);
-	movingAverage(s_det, s_mav, 3, fmax(floor(fps / 6), 2));
-	//movingAverage(s_det1, s_mav1, 3, fmax(floor(fps / 6), 2));
-	//movingAverage(s_det2, s_mav2, 3, fmax(floor(fps / 6), 2));
-	//movingAverage(s_det3, s_mav3, 3, fmax(floor(fps / 6), 2));
-	//movingAverage(s_det4, s_mav4, 3, fmax(floor(fps / 6), 2));
+
+	movingAverage(s_det, s_mav, 3, fmax(floor(this->fps / 6), 2));
 
 
 	//得到最终处理后的心率信号
 	s_mav.copyTo(s_f);
-	//s_mav1.copyTo(s_f1);
-	//s_mav2.copyTo(s_f2);
-	//s_mav3.copyTo(s_f3);
-	//s_mav4.copyTo(s_f4);
-
-	// Logging
 }
 
-//void RPPG::extractSignal_pca() {
-//
-//    // Denoise signals
-//    cv::Mat s_den = cv::Mat(s.rows, s.cols, CV_64F);
-//    denoise(s, re, s_den);
-//
-//    // Normalize signals
-//    normalization(s_den, s_den);
-//
-//    // Detrend
-//    cv::Mat s_det = cv::Mat(s.rows, s.cols, CV_64F);
-//    detrend(s_den, s_det, fps);
-//
-//    // PCA to reduce dimensionality
-//    cv::Mat s_pca = cv::Mat(s.rows, 1, CV_32F);
-//    cv::Mat pc = cv::Mat(s.rows, s.cols, CV_32F);
-//    pcaComponent(s_det, s_pca, pc, low, high);
-//
-//    // Moving average
-//    cv::Mat s_mav = cv::Mat(s.rows, 1, CV_32F);
-//    movingAverage(s_pca, s_mav, 3, fmax(floor(fps/6), 2));
-//	/*bandpass(s_mav, s_mav, low, high);*/
-//
-//    s_mav.copyTo(s_f);
-//
-//    // Logging
-//    if (logMode) {
-//        std::ofstream log;
-//        std::ostringstream filepath;
-//        filepath << logfilepath << "_signal_" << time << ".csv";
-//        log.open(filepath.str());
-//        log << "re;r;g;b;r_den;g_den;b_den;r_det;g_det;b_det;pc1;pc2;pc3;s_pca;s_mav\n";
-//        for (int i = 0; i < s.rows; i++) {
-//            log << re.at<bool>(i, 0) << ";";
-//            log << s.at<double>(i, 0) << ";";
-//            log << s.at<double>(i, 1) << ";";
-//            log << s.at<double>(i, 2) << ";";
-//            log << s_den.at<double>(i, 0) << ";";
-//            log << s_den.at<double>(i, 1) << ";";
-//            log << s_den.at<double>(i, 2) << ";";
-//            log << s_det.at<double>(i, 0) << ";";
-//            log << s_det.at<double>(i, 1) << ";";
-//            log << s_det.at<double>(i, 2) << ";";
-//            log << pc.at<double>(i, 0) << ";";
-//            log << pc.at<double>(i, 1) << ";";
-//            log << pc.at<double>(i, 2) << ";";
-//            log << s_pca.at<double>(i, 0) << ";";
-//            log << s_mav.at<double>(i, 0) << "\n";
-//        }
-//        log.close();
-//    }
-//}
-//
-//
-//void RPPG::extractSignal_xminay() {
-//
-//    // Denoise signals
-//    cv::Mat s_den = cv::Mat(s.rows, s.cols, CV_64F);
-//    denoise(s, re, s_den);
-//
-//    // Normalize raw signals
-//    cv::Mat s_n = cv::Mat(s_den.rows, s_den.cols, CV_64F);
-//    normalization(s_den, s_n);
-//
-//    // Calculate X_s signal
-//    cv::Mat x_s = cv::Mat(s.rows, s.cols, CV_64F);
-//    addWeighted(s_n.col(0), 3, s_n.col(1), -2, 0, x_s);
-//
-//    // Calculate Y_s signal
-//    cv::Mat y_s = cv::Mat(s.rows, s.cols, CV_64F);
-//    addWeighted(s_n.col(0), 1.5, s_n.col(1), 1, 0, y_s);
-//    addWeighted(y_s, 1, s_n.col(2), -1.5, 0, y_s);
-//
-//    // Bandpass
-//    cv::Mat x_f = cv::Mat(s.rows, s.cols, CV_32F);
-//    bandpass(x_s, x_f, low, high);
-//    x_f.convertTo(x_f, CV_64F);
-//    cv::Mat y_f = cv::Mat(s.rows, s.cols, CV_32F);
-//    bandpass(y_s, y_f, low, high);
-//    y_f.convertTo(y_f, CV_64F);
-//
-//    // Calculate alpha
-//    cv::Scalar mean_x_f;
-//    cv::Scalar stddev_x_f;
-//    meanStdDev(x_f, mean_x_f, stddev_x_f);
-//    cv::Scalar mean_y_f;
-//    cv::Scalar stddev_y_f;
-//    meanStdDev(y_f, mean_y_f, stddev_y_f);
-//    double alpha = stddev_x_f.val[0]/stddev_y_f.val[0];
-//
-//    // Calculate signal
-//    cv::Mat xminay = cv::Mat(s.rows, 1, CV_64F);
-//    addWeighted(x_f, 1, y_f, -alpha, 0, xminay);
-//
-//    // Moving average
-//    movingAverage(xminay, s_f, 3, fmax(floor(fps/6), 2));
-//
-//    // Logging
-//    if (logMode) {
-//        std::ofstream log;
-//        std::ostringstream filepath;
-//        filepath << logfilepath << "_signal_" << time << ".csv";
-//        log.open(filepath.str());
-//        log << "r;g;b;r_den;g_den;b_den;x_s;y_s;x_f;y_f;s;s_f\n";
-//        for (int i = 0; i < s.rows; i++) {
-//            log << s.at<double>(i, 0) << ";";
-//            log << s.at<double>(i, 1) << ";";
-//            log << s.at<double>(i, 2) << ";";
-//            log << s_den.at<double>(i, 0) << ";";
-//            log << s_den.at<double>(i, 1) << ";";
-//            log << s_den.at<double>(i, 2) << ";";
-//            log << x_s.at<double>(i, 0) << ";";
-//            log << y_s.at<double>(i, 0) << ";";
-//            log << x_f.at<double>(i, 0) << ";";
-//            log << y_f.at<double>(i, 0) << ";";
-//            log << xminay.at<double>(i, 0) << ";";
-//            log << s_f.at<double>(i, 0) << "\n";
-//        }
-//        log.close();
-//    }
-//}
+
+//寻找功率谱能量前三的频率
 void hrServer::findTriMax(cv::Mat powerSpetrum) {
 	cv::Mat powerSpectrum_copy = powerSpetrum.clone();
 	double max;
@@ -364,7 +228,7 @@ void hrServer::findTriMax(cv::Mat powerSpetrum) {
 
 
 //把处理后的心率信号 进行功率谱变化 求取能量最高的频率  即为心率
-void hrServer::estimateHeartrate() {
+double hrServer::estimateHeartrate() {
 	isbpmgood = 0;
 	powerSpectrum = cv::Mat(s_f.size(), CV_32F);
 
@@ -396,52 +260,258 @@ void hrServer::estimateHeartrate() {
 		double distance[5], maxdistance = 0.0;
 		findTriMax(powerSpectrum);
 		int  a = inds[0], b = inds[1], c = inds[2];
-		cout << "峰值的显著性: " << powerSpectrum.at<double>(a, 0) / powerSpectrum.at<double>(b, 0) << endl;
 		if (pow(a - b, 2) != 1) {
-			if (((powerSpectrum.at<double>(a, 0) / powerSpectrum.at<double>(b, 0) >= 1.9) && powerSpectrum.at<double>(a, 0) >= 6 && powerSpectrum.at<double>(b, 0) >= 6))
+			if ((((powerSpectrum.at<double>(a, 0) / powerSpectrum.at<double>(b, 0)) >= 1.9) && powerSpectrum.at<double>(a, 0) >= 6 ))
 				isbpmgood = 1;
+			cout << "峰值的显著性: " << powerSpectrum.at<double>(a, 0) / powerSpectrum.at<double>(b, 0) << endl;
+
 		}
 		else
 		{
-			if (((powerSpectrum.at<double>(a, 0) / powerSpectrum.at<double>(c, 0) >= 1.9) && powerSpectrum.at<double>(a, 0) >= 6 && powerSpectrum.at<double>(c, 0) >= 6))
+			if ((((powerSpectrum.at<double>(a, 0) / powerSpectrum.at<double>(c, 0)) >= 1.9) && powerSpectrum.at<double>(a, 0) >= 6 ))
 				isbpmgood = 1;
+			cout << "峰值的显著性: " << powerSpectrum.at<double>(a, 0) / powerSpectrum.at<double>(c, 0) << endl;
+
 		}
 		cout << "功率谱能量前三高的频率所在的位置 " << a << " " << powerSpectrum.at<double>(a, 0) << " " << b << " " << powerSpectrum.at<double>(b, 0) << " " << c << " " << powerSpectrum.at<double>(c, 0) << " " << isbpmgood << std::endl;
 
 
-		//for (int i = 0; i < 5; i++) {
-		//	if (maxdistance < distance[i]) {
-		//		maxdistance = distance[i];
-		//		maxp = i;
-		//	}
-		//}
+		double sumEnergy = 0;
+		double signalEnergy = pow(powerSpectrum.at<double>(a, 0), 2);
+		for (int i = 1; i <= 2; ++i) {
+			int leftTemp = a - i < 0 ? 0 : a - i;
+			sumEnergy += pow(powerSpectrum.at<double>(leftTemp, 0), 2);
+			int rightTemp = a + i > powerSpectrum.rows - 1 ? powerSpectrum.rows - 1 : a + i;
+			sumEnergy += pow(powerSpectrum.at<double>(rightTemp, 0), 2);
+		}
+		snr = 10 * (log(signalEnergy / sumEnergy) / log(10));
+		cout << "snr: " << snr << endl;
+
 
 		minMaxLoc(powerSpectrum, &min, &max, &pmin, &pmax, bandMask); p[0] = pmax.y;
 
 
 		// 计算出此次心率信号得到的瞬时心率  BPM
 		bpm = pmax.y * fps / total * SEC_PER_MIN;
-
+		prominentFrequency = pmax.y * fps / total;
+		unitFrequency = fps / total;
+		extractHeartrateVariability();
 
 		//如果足够的鲁棒可靠  放入时间队列
 
 		if (isbpmgood) {
 			bpmsc.push_back(bpm);
+			snrs.push_back(snr);
+			hrvs.push_back(hrv);
 			lastbpm = bpm;
+			lasthrv = hrv;
+			lastsnr = snr;
 		}
 		else if (lastbpm) {
 			bpmsc.push_back(lastbpm);
+			hrvs.push_back(lasthrv);
+			snrs.push_back(lastsnr);
 		}
 
 
 		cout << "all area   " << "FPS=" << fps << " Vals=" << powerSpectrum.rows << " Peak=" << pmax.y << endl;
-		if (bpmsc.rows > 8) {
+		if (bpmsc.rows > 0) {
 			meanBpm = mean(bpmsc)(0);
-			bpmsc.pop_back(2 * bpmsc.rows / 3);
-		}
-		cout << "bpm: " << meanBpm << endl;//此处meanBpm不为0可以返回客户端
+			meanHrv = mean(hrvs)(0);
+			meanSnr = mean(snrs)(0);
+			if (bpmsc.rows > 8) {
+				bpmsc.pop_back(bpmsc.rows);
+				hrvs.pop_back(hrvs.rows);
+			}
 
+		}
+		cout << "bpm: " << meanBpm << "瞬时心率： " << bpm << endl;//此处meanBpm不为0可以返回客户端
+		cout << "信噪比： " << meanSnr << "db " << "心率变异性： " << meanHrv << "ms" << endl;
+		return meanBpm;
 
 	}
 }
+void hrServer::findPeaks(double* src, int src_lenth, double distance, int* indMax, int* indMax_len)
+{
+	int* sign = new int[src_lenth];
+	int max_index = 0,
+		min_index = 0;
+	*indMax_len = 0;
 
+	for (int i = 1; i < src_lenth; i++)
+	{
+		double diff = src[i] - src[i - 1];
+		if (diff > 0)          sign[i - 1] = 1;
+		else if (diff < 0) sign[i - 1] = -1;
+		else                sign[i - 1] = 0;
+	}
+	for (int j = 1; j < src_lenth - 1; j++)
+	{
+		double diff = sign[j] - sign[j - 1];
+		if (diff < 0)      indMax[max_index++] = j;
+	}
+
+	int* flag_max_index = new int[max_index];
+	int* idelete = new int[max_index];
+	int* temp_max_index = new int[max_index];
+	int bigger = 0;
+	double tempvalue = 0;
+	int i, j, k;
+	//波峰  
+	for (int i = 0; i < max_index; i++)
+	{
+		flag_max_index[i] = 0;
+		idelete[i] = 0;
+	}
+	for (i = 0; i < max_index; i++)
+	{
+		tempvalue = -1;
+		for (j = 0; j < max_index; j++)
+		{
+			if (!flag_max_index[j])
+			{
+				if (src[indMax[j]] > tempvalue)
+				{
+					bigger = j;
+					tempvalue = src[indMax[j]];
+				}
+			}
+		}
+		flag_max_index[bigger] = 1;
+		if (!idelete[bigger])
+		{
+			for (k = 0; k < max_index; k++)
+			{
+				idelete[k] |= (indMax[k] - distance <= indMax[bigger] & indMax[bigger] <= indMax[k] + distance);
+			}
+			idelete[bigger] = 0;
+		}
+	}
+	for (i = 0, j = 0; i < max_index; i++)
+	{
+		if (!idelete[i])
+			temp_max_index[j++] = indMax[i];
+	}
+	for (i = 0; i < max_index; i++)
+	{
+		if (i < j)
+			indMax[i] = temp_max_index[i];
+		else
+			indMax[i] = 0;
+	}
+	max_index = j;
+
+
+	*indMax_len = max_index;
+
+	delete sign;
+	delete flag_max_index;
+	delete temp_max_index;
+	delete idelete;
+}
+double* hrServer::ideal_bandpass_filter(double* input, int length, float fl, float fh, float fps) {
+	fftw_plan p, fp;
+	fftw_complex* in = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * length);
+	fftw_complex* out = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * length);
+	fftw_complex* fft_w = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * length);
+	double* output = (double*)fftw_malloc(sizeof(double) * length);
+	for (int i = 0; i < length; i++) {
+		in[i][0] = input[i];
+		in[i][1] = 0.0;
+	}
+	//FFT
+	p = fftw_plan_dft_1d(length, in, fft_w, FFTW_FORWARD, FFTW_ESTIMATE);
+	fftw_execute(p); /* repeat as needed*/
+	int mid = length / 2;
+	//IDEAL BANDPASS
+	double delta = fps / length;
+	int fl_local = int(fl / delta);
+	int fh_local = int(fh / delta);
+	for (int i = 0; i < fl_local; i++) {
+		fft_w[i][0] = 0; fft_w[i][1] = 0;
+		fft_w[length - 1 - i][0] = 0; fft_w[length - 1 - i][1] = 0;
+	}
+	for (int i = fh_local; i <= mid; i++) {
+		fft_w[i][0] = 0; fft_w[i][1] = 0;
+		fft_w[length - 1 - i][0] = 0; fft_w[length - 1 - i][1] = 0;
+	}
+	for (int i = 0; i < length; i++) {
+		fft_w[i][0] /= length;
+		fft_w[i][1] /= length;
+	}
+	//DTFT
+	fp = fftw_plan_dft_1d(length, fft_w, out, FFTW_BACKWARD, FFTW_ESTIMATE);
+	fftw_execute(fp); /* repeat as needed*/
+	for (int j = 0; j < length; j++) {
+		output[j] = out[j][0];
+	}
+	fftw_destroy_plan(p);
+	fftw_destroy_plan(fp);
+	fftw_free(in);
+	fftw_free(out);
+	fftw_free(fft_w);
+	return output;
+}
+
+void hrServer::extractHeartrateVariability() {
+
+	//心率变异性代表的是心跳逐次周期差异的变化情况 这边用sdnn来代替
+	//将s_f从mat格式数据转化为double数组
+	double s_fdouble[1000] = {};
+	int s_fdoubleLen = s_f.rows;
+	for (int i = 0; i < s_f.rows; ++i) {
+		s_fdouble[i] = s_f.at<double>(i, 0);
+		//cout << s_fdouble[i] << endl;
+	}
+
+
+	//对数组进行 带通滤波
+	float fl = (prominentFrequency - 1.5 * unitFrequency) > 0 ? prominentFrequency - 1.5 * unitFrequency : 0;
+	float fh = prominentFrequency + 1.5 * unitFrequency;
+	cout << "fl: " << fl << "fh: " << fh << endl;
+	double* _s_fdouble = ideal_bandpass_filter(s_fdouble, s_fdoubleLen, fl, fh, fps);
+	//ofstream out1("bandpass.txt");
+	//for (int i = 0; i < s_fdoubleLen; ++i) {
+	//	out1 << _s_fdouble[i] << "\n";
+	//}
+	//out1.close();
+	//cout << "fps: " << fps << endl;
+
+
+	//进行峰值检测
+	int peaksLen = 100;
+	int* peaks = new int[peaksLen];
+	int distance = fps / prominentFrequency / 2;
+	findPeaks(_s_fdouble, s_fdoubleLen, distance, peaks, &peaksLen);
+	double unitTime = 1000 / fps;
+
+
+	vector<int> peaksDiff;
+	for (int i = 1; i < peaksLen; ++i) {
+		int tempDiff = peaks[i] - peaks[i - 1];
+		peaksDiff.push_back(tempDiff * unitTime);
+	}
+	//cout << "峰值时间点" << endl;
+	double meadDiff = 0;
+	int sumDiff = 0;
+	for (auto it : peaksDiff) {
+		//cout << it << " ";
+		sumDiff += it;
+	}
+	meadDiff = 1.0 * sumDiff / peaksDiff.size();
+
+	//
+	double sumDviation = 0.0;
+	for (auto it : peaksDiff) {
+		sumDviation += pow((it - meadDiff), 2);
+	}
+	double hrvPeaksNum = 0;
+	double hrv = 0;
+	cout << "unittime: " << unitTime << endl;
+	cout << "sumDviation :" << sumDviation << endl;
+	hrvPeaksNum = sqrt(sumDviation / peaksDiff.size());
+	//cout << "hrvPeaksNum: " << hrvPeaksNum << endl;
+	cout << "hrv: " << hrvPeaksNum << endl;
+	this->hrv = hrvPeaksNum;
+	delete peaks;
+}

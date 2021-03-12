@@ -19,10 +19,10 @@ public:
 		meanBpm = 0;
 	}
 	~hrServer(){}
-	void extractSignal_g(int reTrack[], double green[], int length, double fps);
+	void extractSignal_g(int reTrack[], double green[], int length, double fps,int timeStamps[]);
 	//void extractSignal_pca();
 	//void extractSignal_xminay();
-	void estimateHeartrate();
+	double estimateHeartrate();
 
 
 
@@ -37,8 +37,9 @@ private:
 	void timeToFrequency(cv::InputArray _a, cv::OutputArray _b, bool magnitude);
 	void array2Mat(double green[], int length);
 	void array2Mat(int reTrack[], int length);
-
-
+	void extractHeartrateVariability();
+	void findPeaks(double* src, int src_lenth, double distance, int* indMax, int* indMax_len);
+	double* ideal_bandpass_filter(double* input, int length, float fl, float fh, float fps);
 
 
 
@@ -80,14 +81,15 @@ private:
 
 	// Estimation
 	cv::Mat1d s_f/*, s_f1, s_f2, s_f3, s_f4*/;
-	cv::Mat1d bpms, bpmsc/*, bpms1, bpms2, bpms3, bpms4,idealbpms*/;
+	cv::Mat1d bpms, bpmsc,snrs,hrvs/*, bpms1, bpms2, bpms3, bpms4,idealbpms*/;
 
 	cv::Mat1d powerSpectrum/*, powerSpectrum1, powerSpectrum2, powerSpectrum3, powerSpectrum4*/;
 	double bpm /*, bpm1 = 0.0, bpm2 = 0.0, bpm3 = 0.0, bpm4 = 0.0,bpm5=0.0,idealbpm=0.0*/;
 	int isbpmgood ;
-	double lastbpm;
-	double meanBpm ;
-
+	double lastbpm,lasthrv,lastsnr;
+	double meanBpm,meanHrv,meanSnr ;
+	double prominentFrequency;
+	double unitFrequency,snr,hrv;
 	// Logfiles
 	//std::ofstream logfile;
 	//std::ofstream logfileDetailed;

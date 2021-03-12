@@ -20,7 +20,7 @@ public:
 
 	deque<result> hrResult;
 	void isFileExsistence();
-	void processonvideo(std::string videoname, int samplingFrequency, int minSignalSize, int maxSignalSize, int chunkSize, bool gui);
+	void processonvideo(std::string videoname, int samplingFrequency, int minSignalSize, int maxSignalSize, int slideWindowStep, bool gui);
 	int processoncamera(int cameraindex, int sampletime, int samplingFrequency, int minSignalSize, int maxSignalSize, int chunkSize, bool gui);
 
 	//void processoncamera(int cameraindex, int sampletime, int samplingFrequency, int minSignalSize, int maxSignalSize, int chunkSize, bool gui);

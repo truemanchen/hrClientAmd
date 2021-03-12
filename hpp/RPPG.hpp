@@ -22,7 +22,7 @@ struct result {
 	int reTrack[1000];
 	int length;
 	double fps;
-	char state[4];
+	int timeStamp[1000];
 };
 
 class RPPG {
@@ -37,25 +37,29 @@ public:
 		const int width, const int height, const double timeBase, const int downsample,
 		const double samplingFrequency, const double rescanFrequency,
 		const int minSignalSize, const int maxSignalSize,
-		const int chunkSize, 
+		const int slideWindowStep, 
 		const string dnnProtoPath, const string dnnModelPath,
 		 const bool gui);
 
-	void processFrame(cv::Mat frameRGB, cv::Mat frameGray, int time);
+	void processFrame(const cv::Mat& frameRGB, const cv::Mat& frameGray, const int time);
 	//void processFrame_warp(cv::Mat& frameRGB, cv::Mat& frameGray, int time);
 
-	void exit();
 	typedef std::vector<cv::Point2f> Contour2f;
+	void invalidateFace();
 	std::deque<result> hrResult;
+	bool isFaceValid();
+	void brightnessException(cv::Mat InputImg, float& cast, float& da);
 
 
 
 private:
+	void histOfArea(cv::Mat face, cv::Mat faceMask);
+	void drawHist(vector<int> nums);
 
-	void detectFace(cv::Mat frameRGB, cv::Mat frameGray);
+	void detectFace(const cv::Mat& frameRGB, const cv::Mat& frameGray);
 	void setNearestBox(std::vector<cv::Rect> boxes);
-	void detectCorners(cv::Mat frameGray);
-	void trackFace(cv::Mat frameGray);
+	void detectCorners(const cv::Mat& frameGray);
+	void trackFace(const cv::Mat& frameGray);
 	//void updateMask(cv::Mat& frameGray);
 	//void updateROI();
 	void extractSignal_g();
@@ -63,32 +67,26 @@ private:
 	//void extractSignal_xminay();
 	//void estimateHeartrate();
 	//void draw(cv::Mat& frameRGB);
-	void invalidateFace();
 	//void log();
-	void getFacePoints(std::vector<cv::Point> landMark);
-   void findTriMax(cv::Mat powerSpectrum);
-	//void findMaxInd(int start,int end);
-	double findDistance(cv::Mat powerSpectrum);
-	cv::Mat HSV_detector(cv::Mat src);
-	void makeframedata(cv::Mat frameRGB, std::vector<cv::Point>ptr, std::vector<cv::Mat>& processframe);
+	cv::Mat HSV_detector(const cv::Mat& src);
+	void makeframedata(const cv::Mat& frameRGB, std::vector<cv::Point>ptr, std::vector<cv::Mat>& processframe);
 	double getFps(cv::Mat& t, const double timeBase);
 	void push(cv::Mat& m);
 
-	// The algorithm
+	// 心率识别算法
 	rPPGAlgorithm rPPGAlg;
-	// The classifier
+	// 人脸识别算法
 	faceDetAlgorithm faceDetAlg;
 	cv::CascadeClassifier haarClassifier;
 	cv::dnn::Net dnnClassifier;
 
-	// Settings
+	// 设置
 	cv::Size minFaceSize;
 	int maxSignalSize;
 	int minSignalSize;
 	double rescanFrequency;
 	double samplingFrequency;
 	double timeBase;
-	bool logMode;
 	bool guiMode;
 	
 	// State variables
@@ -99,7 +97,7 @@ private:
 	int64_t lastScanTime;
 	int low;
 	int64_t now;
-	bool faceValid=false;
+	bool faceValid;
 	bool rescanFlag;
 	
 
@@ -119,33 +117,35 @@ private:
 	cv::Mat1d s/*,s1,s2,s3,s4*/;
 	cv::Mat1d t;
 	cv::Mat1b re;
+	cv::Mat1d allFrameNumber;
 
 
-	// Logfiles
-	std::ofstream logfile;
-	std::ofstream logfileDetailed;
-	std::string logfilepath;
 	
 	//warp
-	bool isFirst = true;
-	cv::Point2f affine_transform_keypoints_first[5], affine_transform_keypoints_other[5];
-	cv::Mat faceother;
-    cv::Mat facefirst;
-	cv::Rect firstBox;
-	std::vector<cv::Point2f> firstlandmark;
-	
-	
-	cv::Mat trans_other_to_first;
-	cv::Mat warpped_other_face;
+	//cv::Point2f affine_transform_keypoints_first[5], affine_transform_keypoints_other[5];
+	//cv::Mat faceother;
+ //   cv::Mat facefirst;
+	//cv::Rect firstBox;
+	//std::vector<cv::Point2f> firstlandmark;
+	//
+	//
+	//cv::Mat trans_other_to_first;
+	//cv::Mat warpped_other_face;
 	cv::Mat smallframe;
 
 	//vote
 	//double vote[VOTENUM];
 	//double maxnum;
 	//std::vector<int> maxind;
-	int frameCount = 0;
-	int inds[5];
-	int chunkSize, chunkSizeCount=0;
+	int frameCount ;
+	int slideWindowStep, slideWindowStepCount=0;
+
+
+	//状态码
+	//bool state[5];//第二位代表有没有人脸 第三位代表能不能是否有重新追踪 第四位代表有没有足够的心率信号长度 0是没有 1是有
+
+	//结果
+
 };
 
 #endif /* RPPG_hpp */
